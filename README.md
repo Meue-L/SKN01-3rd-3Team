@@ -9,7 +9,7 @@
 
 ### 📢팀명: 에메레스(LMS-Language Models)<br/><br/>
 ### -팀원 소개-
-### 👧🏻최민지: 팀장👑 | 👨🏻이민재: 에이스✨ | 🧒🏻이근: 팀원 | 🧑🏻‍🦱이재호: 팀원 | 🧑🏻이현석: 팀원<br/><br/><br/><br/>
+### 👧🏻최민지: 👑대왕 팀장👑 | 👨🏻이민재: 커피 찍은 에이스✨ | 🧒🏻이근: 팀원 | 🧑🏻‍🦱이재호: 팀원 | 🧑🏻이현석: 팀원<br/><br/><br/><br/>
 
 # 2. Introduction Project (프로젝트 개요)
 ### ✅프로젝트 목표: 웹 어플리케이션 배포
@@ -114,6 +114,10 @@ docker-compose up -d
 <br/><br/><br/><br/>
 
 # 9. Autonomous Deploy (자동 배포 진행 절차)
+#### 👉🏻Continuous Integration (CI): 코드 변경 사항이 repository에 푸시될 때마다 자동으로 빌드 및 테스트를 실행하여 코드의 일관성과 품질을 유지
+
+#### 👉🏻Continuous Deployment (CD): 코드가 성공적으로 빌드되고 테스트를 통과하면 자동으로 배포 단계로 넘어가 프로덕션 환경에 배포됨
+
 ## Backend (Server)
 #### 👉🏻 ci.yml
 ```
@@ -241,6 +245,11 @@ jobs:
           -d '{"event_type": "BACKEND_TEST_FINISH_TRIGGER", "client_payload": { "repository": "'"$GITHUB_REPOSITORY"'" }}'
 ```
 
+- deploy 전, makemigrations/migrate를 AWS상에서 진행
+   -> AWS상에 존재하는 SQL에서 DB를 생성하는 절차가 필요하기 때문
+- 이후 test 진행
+- 마지막으로 CD에 trigger(BACKEND_TEST_FINISH_TRIGGER)를 보냄
+
 #### 👉🏻 cd.yml
 ```
 name: Django CD (Continuous Deploy)
@@ -367,6 +376,14 @@ jobs:
       run: |
         aws ec2 revoke-security-group-ingress --group-id ${{secrets.AWS_SECURITY_GROUP_ID}} --protocol tcp --port 22
 ```
+
+- CI에서 보낸 trigger(BACKEND_TEST_FINISH_TRIGGER)를 인식해서 CD 구동 시작
+- GHCR.io에 login해서 이미지를 빌드 후 github Actions 서버단에 Image화 해서 올려줌 (--Build and Push Image)
+- Deploy단계로 진입
+- 미리 설정해둔 AWS내부의 Github runner가 Deploy 단계로 진입한 Github Action의 CD를 인식
+- AWS디렉토리 내부의 해당 docker compose를 구동(Deploy to Production)
+
+
 ## Frontend (UI)
 #### 👉🏻 ci.yml -->
 ```name: CI (Continuous Intergration)
@@ -542,6 +559,12 @@ jobs:
         run: |
           aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
 ```
+
+- CD단계에서는 대부분 Django와 구성이 같으나, Deploy to Production단계에서 image를 받아와서 빌드 하는것이 아닌, 
+해당 vue 디렉토리에서 npm run build를 수행 후 생성된 dist 폴더 밑의 파일들을 복사해오는 과정이 필요함
+- docker-compose 구동
+- ssh프로토콜이 적용된 cp 명령어 = scp
+
 ## FastAPI (AI Core Server)
 #### 👉🏻 main.yml
 ```
@@ -572,7 +595,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildx-cache
-          key: ${{runner.os}}-buildx-${{env.VERSION}}}
+          key: ${{runner.os}}-buildx-${{env.VERSION}}
           restore-keys: |
             ${{runner.os}}-buildx-
             
@@ -630,6 +653,10 @@ jobs:
   
             docker-compose up -d
 ```
+
+- FASTAPI에서는 CI/CD르 하나로 구성
+- 사전 테스팅 단계(django에서는 migrate, tests..., vue에서는 npm install --legacy-peer-deps, npm run test)가 없어서 임의로 CD만 구현
+- FASTAPI는 Django의 CD와 동일하게 image를 빌드하여 서버단에 업로드 후 Actions를 통해 AWS상에서 빌드함
 
 <br/><br/><br/><br/>
 

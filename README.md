@@ -52,15 +52,584 @@
 
 # 8. Manual Deploy (수동 배포 진행 절차)
 ## Frontend (UI)
+#### 👉🏻build
+```
+npm run build
+```
+#### 👉🏻build 완료
+<img src="img/frontend_manualdeploy.png">
+
+#### 👉🏻scp 명령어 사용
+```
+ scp -i "pem키(상대경로 혹은 절대경로)" -r * ec2-user@AWS_IP:/home/ec2-user/프로젝트팀/vue-frontend/html/
+```
+<img src="img/frontend_manualdeploy2.png">
+
+#### 👉🏻docker-compose.yml을 활용하여 실행
+```
+docker-compose up -d
+```
+<br/>
+
 ## Backend (Server)
+#### 👉🏻GHCR에 docker login진행
+```
+echo "GHCR토큰" | docker login ghcr.io -u 계정 --password-stdin
+```
+#### 👉🏻명령어로 image pull
+<img src="img/backend_manualdeploy.png">
+
+#### 👉🏻image build
+<img src="img/backend_manualdeploy2.png">
+<img src="img/backend_manualdeploy3.png">
+
+#### 👉🏻 docker-compose 구동
+<img src="img/backend_manualdeploy4.png">
+
+<br/>
+
 ## FastAPI (AI Core Server)
+
+#### 👉🏻GHCR에 docker login진행
+```
+echo "GHCR토큰" | docker login ghcr.io -u 계정 --password-stdin
+```
+#### 👉🏻docker build 구성
+```
+export DOCKER_BUILDKIT=1
+docker buildx create --use
+docker buildx build --platform linux/arm64 --file ./Dockerfile --push -t ghcr.io/계정/gtp-fastapi-server:latest .
+```
+#### 👉🏻build 진행
+<img src="img/fastapi_manualdeploy.png">
+
+#### 👉🏻동작 확인
+<img src="https://github.com/user-attachments/assets/a864f59d-0e7c-4645-a95f-00e23033fd85">
+
+#### 👉🏻백그라운드로 실행
+```
+docker-compose up -d
+```
 
 <br/><br/><br/><br/>
 
 # 9. Autonomous Deploy (자동 배포 진행 절차)
-## Frontend (UI)
 ## Backend (Server)
+#### 👉🏻 ci.yml
+```
+name: Django CI (Continuous Integration)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Setup MySQL
+      uses: samin/mysql-action@v1
+      with:
+        character set server: 'utf8'
+        mysql database: ${{ secrets.DATABASE_NAME }}
+        mysql user: ${{ secrets.DATABASE_USER }}
+        mysql password: ${{ secrets.DATABASE_PASSWORD }}
+        
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.10.5
+
+    - name: Check current directory
+      run: pwd
+
+    - name: List files in current directory
+      run: ls -la
+
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      working-directory: ./lms_project
+      run: |
+        if [ -f requirements.txt ]; then
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+        else
+          echo "requirements.txt not found. Exiting."
+          exit 1
+        fi
+
+    - name: Create .env file for CI Test
+      working-directory: ./lms_project
+      run: |
+        echo "CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }}" > .env
+        echo "CSRF_TRUSTED_ORIGINS=${{ secrets.CSRF_TRUSTED_ORIGINS }}" >> .env
+        echo "DATABASE_NAME=${{ secrets.DATABASE_NAME }}" >> .env
+        echo "DATABASE_USER=${{ secrets.DATABASE_USER }}" >> .env
+        echo "DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}" >> .env
+        echo "DATABASE_HOST=127.0.0.1" >> .env
+        echo "DATABASE_PORT=3306" >> .env
+        echo "KAKAO_LOGIN_URL=${{ secrets.KAKAO_LOGIN_URL }}" >> .env
+        echo "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" >> .env
+        echo "KAKAO_REDIRECT_URI=${{ secrets.KAKAO_REDIRECT_URI }}" >> .env
+        echo "KAKAO_TOKEN_REQUEST_URI=${{ secrets.KAKAO_TOKEN_REQUEST_URI }}" >> .env
+        echo "KAKAO_USERINFO_REQUEST_URI=${{ secrets.KAKAO_USERINFO_REQUEST_URI }}" >> .env
+        echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
+        echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
+        echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
+
+    - name: Wait for MySQL to be ready
+      working-directory: ./lms_project
+      run: |
+        for i in {60..0}; do  # Increased wait time
+          if mysqladmin ping -h "127.0.0.1" --silent; then
+            break
+          fi
+          echo 'MySQL is unavailable - sleeping'
+          sleep 2  # Increased sleep time
+        done
+        if [ "$i" = 0 ]; then
+          echo 'MySQL is still unavailable - exiting'
+          exit 1
+        fi
+        echo 'MySQL is up - continuing'
+
+    - name: Make migrations
+      working-directory: ./lms_project
+      run: |
+        source .venv/bin/activate
+        python manage.py makemigrations
+
+    - name: Run migrations
+      working-directory: ./lms_project
+      run: |
+        source .venv/bin/activate
+        python manage.py migrate --noinput
+
+    - name: Find test modules
+      working-directory: ./lms_project
+      id: find_tests
+      run: |
+        source .venv/bin/activate
+        chmod +x find_test.sh
+        TEST_MODULES=$(./find_test.sh)
+        echo "TEST_MODULES=$TEST_MODULES" >> $GITHUB_ENV
+
+    - name: Run tests
+      working-directory: ./lms_project
+      run: |
+        source .venv/bin/activate
+        python manage.py test $TEST_MODULES
+
+    - name: send BACKEND_TEST_FINISH_TRIGGER
+      run: |
+        curl -X POST https://api.github.com/repos/${{ github.repository }}/dispatches \
+          -H 'Accept: application/vnd.github.v3+json' \
+          -u ${{ secrets.GHCR_TOKEN }} \
+          -d '{"event_type": "BACKEND_TEST_FINISH_TRIGGER", "client_payload": { "repository": "'"$GITHUB_REPOSITORY"'" }}'
+```
+
+#### 👉🏻 cd.yml
+```
+name: Django CD (Continuous Deploy)
+
+on:
+  repository_dispatch:
+    types: [BACKEND_TEST_FINISH_TRIGGER]
+    
+env:
+  DOCKER_IMAGE: ghcr.io/${{ secrets.REAL_ACTOR }}/lms-django-backend-server
+
+jobs:
+  build:
+    name: build-app
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.10.5
+
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install Dependencies
+      working-directory: ./lms_project
+      run: |
+        if [ -f requirements.txt ]; then
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+        else
+          echo "requirements.txt not found"
+          exit 1
+        fi
+    - name: Grant execute permission for scripts
+      run: |
+        chmod +x lms_project/wait-for-it.sh
+        chmod +x lms_project/manage.py
+        
+    - name: Configure Docker
+      uses: docker/setup-buildx-action@v1
+
+    - name: Cache Docker Layers
+      uses: actions/cache@v2
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ env.VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+
+    - name: Setup Docker BuildKit
+      run: |
+        echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
+
+    - name: Login to GHCR
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{ secrets.REAL_ACTOR }}
+        password: ${{ secrets.GHCR_TOKEN }}
+
+    - name: Build and Push Docker Image
+      run: |
+        cd lms_project
+        docker buildx build --platform linux/arm64 -f Dockerfile -t ${{ env.DOCKER_IMAGE}}:latest --push .
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: [ self-hosted, deploy-lms-backend ]
+    steps:
+    - name: Get Github Actions IP
+      id: ip
+      uses: haythem/public-ip@v1.2
+
+    - name: Configure AWS IAM Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key: ${{secrets.AWS_ACCESS_KEY_ID}}
+        aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+        aws-region: ap-northeast-2
+    - name: Add Github Actions IP to Security Group
+      run: |
+        aws ec2 authorize-security-group-ingress --group-id ${{secrets.AWS_SECURITY_GROUP_ID}} --protocol tcp --port 22 --cidr ${{steps.ip.outputs.ipv4}}/32
+        
+    - name: Login to GHCR
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{ secrets.REAL_ACTOR }}
+        password: ${{ secrets.GHCR_TOKEN }}
+
+    - name: Deploy to Production
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.HOST_IP }}
+        username: ec2-user
+        key: ${{ secrets.PRIVATE_KEY }}
+        script_stop: true
+        script: |
+            cd /home/ec2-user/lms/django-backend
+            docker-compose down
+
+            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.REAL_ACTOR }} --password-stdin
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
+
+            docker image prune -f
+            docker logout
+
+            docker-compose up -d
+    - name: Remove Github Actions IP From Security Group
+      run: |
+        aws ec2 revoke-security-group-ingress --group-id ${{secrets.AWS_SECURITY_GROUP_ID}} --protocol tcp --port 22
+```
+## Frontend (UI)
+#### 👉🏻 ci.yml -->
+```name: CI (Continuous Intergration)
+on:
+  push:
+      branches: ["main"]
+jobs:
+  build:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '20'
+    - name: Cache dependencies
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: '**/node_modules'
+        key: ${{runner.os}}-node-${{hashfiles('**/package-lock.json')}}
+        restore-keys: |
+          ${{runner.os}}-node-
+
+    - name: Install Dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        npm ci --legacy-peer-deps
+
+    - name: Create .env development for CI
+      run: |
+        pwd
+        echo "{{secretes.ENV_DEVELOPMENT}}" > .env.development
+        cat .env.development
+
+    - name: Real Test
+      run: |
+        npm run test:unit
+
+    - name: send FRONTEND_TEST_FINISH_TRIGGER
+      run: |
+        curl -S -X POST https://api.github.com/repos/${{github.repository}}/dispatches \
+              -H 'Accept: application/vnd.github.v3+json' \
+              -u ${{ secrets.GHCR_TOKEN}} \
+              -d '{"event_type": "FRONTEND_TEST_FINISH_TRIGGER", "client_payload":{"repository":"'"$GITHUB_REPOSITORY"'"}}'
+```
+
+#### 👉🏻 cd.yml
+```
+name: CD (Continuous Deploy)
+
+on:
+  repository_dispatch:
+    types: [FRONTEND_TEST_FINISH_TRIGGER]
+
+jobs:
+  build:
+    name: build-app
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get Github Actions IP
+      id: ip
+      uses: haythem/public-ip@v1.2
+
+    - name: Configure AWS IAM Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-northeast-2
+
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '20'
+        
+    - name: Cache dependencies
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: '**/node_modules'
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install Dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        npm ci --legacy-peer-deps
+
+    - name: Create .env.production for Continuous Deploy
+      run: |
+        echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
+        cat .env.production
+
+    - name: Build
+      run: |
+        npm run build
+        ls
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.0
+      with:
+        ssh-private-key: ${{ secrets.PRIVATE_KEY }}
+
+    - name: Add Github Actions IP to Security Group
+      run: |
+        aws ec2 authorize-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+    - name: SCP Action
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.HOST_IP }}
+        username: ec2-user
+        key: ${{ secrets.PRIVATE_KEY }}
+        source: "./dist/**"
+        target: "/home/ec2-user/lms/actions-frontend"
+
+    - name: Remove Github Actions IP From Security Group
+      run: |
+        aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+    - name: SSH Agent Cleanup
+      if: ${{ always() }}
+      uses: webfactory/ssh-agent@v0.5.0
+      with:
+        ssh-private-key: ${{ secrets.PRIVATE_KEY }}
+
+  deploy:
+    name: Deploy to Production
+    needs: build
+    runs-on: [ self-hosted, deploy-lms-frontend ]
+    steps:
+      - name: Get Github Actions IP
+        id: ip
+        uses: haythem/public-ip@v1.2
+        
+      - name: Configure AWS IAM Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Add Github Actions IP to Security Group
+        run: |
+          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+    
+      - name: Deploy to Production
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST_IP }}
+          username: ec2-user
+          key: ${{ secrets.PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            pwd
+            cd /home/ec2-user/lms/vue-frontend
+            cp -r /home/ec2-user/lms/actions-frontend/dist/* ./html/
+
+            docker image prune -f
+            docker logout
+
+            docker-compose up -d
+
+      - name: Remove Github Actions IP From Security Group
+        run: |
+          aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+```
 ## FastAPI (AI Core Server)
+#### 👉🏻 main.yml
+```
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_IMAGE: ghcr.io/${{github.actor}}/fastapi-server
+  VERSION: ${{github.sha}}
+  NAME: fastapi-server
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Configure Docker
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker Layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{runner.os}}-buildx-${{env.VERSION}}}
+          restore-keys: |
+            ${{runner.os}}-buildx-
+            
+      - name: Set up Docker BuildKit
+        run: |
+          echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
+
+      - name: Login to GHCR
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{secrets.GHCR_TOKEN}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{secrets.REAL_ACTOR}}/fastapi-server:latest
+          platforms: linux/arm64
+          
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: [self-hosted, deploy-fastapi]
+    steps:
+      - name: Login to ghcr
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{github.actor}}
+          password: ${{secrets.GHCR_TOKEN}}
+          
+      - name: Deploy to prod
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{secrets.HOST_PROD}}
+          username: ec2-user
+          key: ${{secrets.PRIVATE_KEY}}
+          script_stop: true
+          script: |
+            pwd
+            ls -al
+            cd fastapi/actions-runner
+            pwd
+  
+            echo ${{secrets.GHCR_TOKEN}} | docker login ghcr.io -u ${{github.actor}} --password-stdin
+  
+            docker pull ghcr.io/${{secrets.REAL_ACTOR}}/fastapi-server:latest
+  
+            docker image prune -f
+            docker logout
+  
+            docker-compose up -d
+```
 
 <br/><br/><br/><br/>
 
@@ -176,7 +745,7 @@ The list of all available versions can be found here: https://raw.githubusercont
 
 # 14. 한 줄 회고
 ### 👧🏻최민지: AWS 서버상에서 프로젝트를 진행할 수 있는 좋은 경험이었습니다.
-### 👨🏻이민재: 짧은 기간이었지만 너무 많은 요소들을 머리에 때려박느라 과부하가 올 것 같지만, 재밌었다.
+### 👨🏻이민재: 짧은 기간이었지만 너무 많은 요소들을 머리에 때려박느라 과부하가 온 것 같지만, 재밌었다.
 ### 🧒🏻이&nbsp;&nbsp;&nbsp;&nbsp;근: 
 ### 🧑🏻‍🦱이재호: GitHub Actions, GitHub Runner, Docker, AWS를 결합해 CI/CD 환경을 구축한 이번 프로젝트는 자동화된 배포 파이프라인의 혁신적인 효율성과 탁월한 안정성을 체감할 수 있는 소중한 경험이었습니다.
 ### 🧑🏻이현석: 프로젝트를 배포하여 실제로 사람들에게 서비스를 할 수 있게 되는 과정을 경험할 수 있는 좋은 기회였습니다.

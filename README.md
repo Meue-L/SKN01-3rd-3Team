@@ -675,6 +675,10 @@ jobs:
 <img src="img/home2.png">
 <img src="img/travel.png">
 
+### Coverage Test
+<img src="img/lms_coverage.png" alt="Coverage Report" width="400">
+
+- Backend code coverage test 결과, 전체 코드의 81%가 test coverage에 포함되었으며, 주요 파일들은 높은 coverage 비율을 기록하였음
 
 <br/><br/><br/><br/>
 

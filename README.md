@@ -9,7 +9,7 @@
 
 ### 📢팀명: 에메레스(LMS-Language Models)<br/><br/>
 ### -팀원 소개-
-### 👧🏻최민지: 👑대왕 팀장👑 | 👨🏻이민재: 커피 찍은 에이스✨ | 🧒🏻이근: 팀원 | 🧑🏻‍🦱이재호: 팀원 | 🧑🏻이현석: 팀원<br/><br/><br/><br/>
+### 👧🏻최민지: 👑대황 팀장👑 | 👨🏻이민재: 커피 찍은 에이스(파사삭)🍪 | 🧒🏻이근: 팀원 | 🧑🏻‍🦱이재호: 팀원 | 🧑🏻이현석: 팀원<br/><br/><br/><br/>
 
 # 2. Introduction Project (프로젝트 개요)
 ### ✅프로젝트 목표: 웹 어플리케이션 배포
@@ -24,7 +24,7 @@
 
 <img src="img/CI_CD.png"><br/><br/><br/>
 
-<br/><br/>
+<br/><br/><br/>
 
 # 3. ERD 구성
 <img src="img/ERD.png"><br/><br/><br/><br/>
@@ -69,7 +69,7 @@ npm run build
 ```
 docker-compose up -d
 ```
-<br/>
+<br/><br/>
 
 ## Backend (Server)
 #### 👉🏻GHCR에 docker login진행
@@ -86,7 +86,7 @@ echo "GHCR토큰" | docker login ghcr.io -u 계정 --password-stdin
 #### 👉🏻 docker-compose 구동
 <img src="img/backend_manualdeploy4.png">
 
-<br/>
+<br/><br/>
 
 ## FastAPI (AI Core Server)
 
@@ -104,7 +104,7 @@ docker buildx build --platform linux/arm64 --file ./Dockerfile --push -t ghcr.io
 <img src="img/fastapi_manualdeploy.png">
 
 #### 👉🏻동작 확인
-<img src="https://github.com/user-attachments/assets/a864f59d-0e7c-4645-a95f-00e23033fd85">
+<img src="img/fastapi_manualdeploy2.png">
 
 #### 👉🏻백그라운드로 실행
 ```
@@ -117,6 +117,9 @@ docker-compose up -d
 #### 👉🏻Continuous Integration (CI): 코드 변경 사항이 repository에 푸시될 때마다 자동으로 빌드 및 테스트를 실행하여 코드의 일관성과 품질을 유지
 
 #### 👉🏻Continuous Deployment (CD): 코드가 성공적으로 빌드되고 테스트를 통과하면 자동으로 배포 단계로 넘어가 프로덕션 환경에 배포됨
+
+
+<br/>
 
 ## Backend (Server)
 #### 👉🏻 ci.yml
@@ -245,10 +248,12 @@ jobs:
           -d '{"event_type": "BACKEND_TEST_FINISH_TRIGGER", "client_payload": { "repository": "'"$GITHUB_REPOSITORY"'" }}'
 ```
 
-- deploy 전, makemigrations/migrate를 AWS상에서 진행
-   -> AWS상에 존재하는 SQL에서 DB를 생성하는 절차가 필요하기 때문
-- 이후 test 진행
-- 마지막으로 CD에 trigger(BACKEND_TEST_FINISH_TRIGGER)를 보냄
+### ✔️ deploy 전, makemigrations/migrate를 AWS상에서 진행
+###   &emsp;&emsp;-> AWS상에 존재하는 SQL에서 DB를 생성하는 절차가 필요하기 때문
+### ✔️ 이후 test 진행
+### ✔️ 마지막으로 CD에 trigger(BACKEND_TEST_FINISH_TRIGGER)를 보냄
+---
+<br/>
 
 #### 👉🏻 cd.yml
 ```
@@ -377,12 +382,13 @@ jobs:
         aws ec2 revoke-security-group-ingress --group-id ${{secrets.AWS_SECURITY_GROUP_ID}} --protocol tcp --port 22
 ```
 
-- CI에서 보낸 trigger(BACKEND_TEST_FINISH_TRIGGER)를 인식해서 CD 구동 시작
-- GHCR.io에 login해서 이미지를 빌드 후 github Actions 서버단에 Image화 해서 올려줌 (--Build and Push Image)
-- Deploy단계로 진입
-- 미리 설정해둔 AWS내부의 Github runner가 Deploy 단계로 진입한 Github Action의 CD를 인식
-- AWS디렉토리 내부의 해당 docker compose를 구동(Deploy to Production)
+### ✔️ CI에서 보낸 trigger(BACKEND_TEST_FINISH_TRIGGER)를 인식해서 CD 구동 시작
+### ✔️ GHCR.io에 login해서 이미지를 빌드 후 github Actions 서버단에 Image화 해서 올려줌 (--Build and Push Image)
+### ✔️ Deploy단계로 진입
+### ✔️ 미리 설정해둔 AWS내부의 Github runner가 Deploy 단계로 진입한 Github Action의 CD를 인식
+### ✔️ AWS디렉토리 내부의 해당 docker compose를 구동(Deploy to Production)
 
+<br/><br/>
 
 ## Frontend (UI)
 #### 👉🏻 ci.yml -->
@@ -433,6 +439,7 @@ jobs:
               -u ${{ secrets.GHCR_TOKEN}} \
               -d '{"event_type": "FRONTEND_TEST_FINISH_TRIGGER", "client_payload":{"repository":"'"$GITHUB_REPOSITORY"'"}}'
 ```
+---
 
 #### 👉🏻 cd.yml
 ```
@@ -560,10 +567,11 @@ jobs:
           aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
 ```
 
-- CD단계에서는 대부분 Django와 구성이 같으나, Deploy to Production단계에서 image를 받아와서 빌드 하는것이 아닌, 
-해당 vue 디렉토리에서 npm run build를 수행 후 생성된 dist 폴더 밑의 파일들을 복사해오는 과정이 필요함
-- docker-compose 구동
-- ssh프로토콜이 적용된 cp 명령어 = scp
+### ✔️ CD단계에서는 대부분 Django와 구성이 같으나, Deploy to Production단계에서 image를 받아와서 빌드 하는것이 아닌,해당 vue 디렉토리에서 npm run build를 수행 후 생성된 dist 폴더 밑의 파일들을 복사해오는 과정이 필요함
+### ✔️ docker-compose 구동
+### ✔️ ssh프로토콜이 적용된 cp 명령어 = scp
+
+<br/><br/>
 
 ## FastAPI (AI Core Server)
 #### 👉🏻 main.yml
@@ -654,9 +662,9 @@ jobs:
             docker-compose up -d
 ```
 
-- FASTAPI에서는 CI/CD르 하나로 구성
-- 사전 테스팅 단계(django에서는 migrate, tests..., vue에서는 npm install --legacy-peer-deps, npm run test)가 없어서 임의로 CD만 구현
-- FASTAPI는 Django의 CD와 동일하게 image를 빌드하여 서버단에 업로드 후 Actions를 통해 AWS상에서 빌드함
+### ✔️ FASTAPI에서는 CI/CD르 하나로 구성
+### ✔️ 사전 테스팅 단계(django에서는 migrate, tests..., vue에서는 npm install --legacy-peer-deps, npm run test)가 없어서 임의로 CD만 구현
+### ✔️ FASTAPI는 Django의 CD와 동일하게 image를 빌드하여 서버단에 업로드 후 Actions를 통해 AWS상에서 빌드함
 
 <br/><br/><br/><br/>
 
@@ -773,6 +781,6 @@ The list of all available versions can be found here: https://raw.githubusercont
 # 14. 한 줄 회고
 ### 👧🏻최민지: AWS 서버상에서 프로젝트를 진행할 수 있는 좋은 경험이었습니다.
 ### 👨🏻이민재: 짧은 기간이었지만 너무 많은 요소들을 머리에 때려박느라 과부하가 온 것 같지만, 재밌었다.
-### 🧒🏻이&nbsp;&nbsp;&nbsp;&nbsp;근: 
+### 🧒🏻이&nbsp;&nbsp;&nbsp;&nbsp;근: 함께 협업을하면서 강사님이알려주신 애자일 방식으로 진행해야 하는 이유와 DDD 방식으로 코드를 구성해야 하는 이유에 대해서몸소 깨달을 수 있어 좋았다. 그리고 1달 이상을 팀원들과 열심히 복습하고 프로젝트를 진행했는데, 다들 점점 실력이 오르는게 눈에 보여서매우 뿌듯했다. 앞으로 어딜 가더라도 맡은 일은잘 할 수 있을거라 믿는다! 다들 고생했어~
 ### 🧑🏻‍🦱이재호: GitHub Actions, GitHub Runner, Docker, AWS를 결합해 CI/CD 환경을 구축한 이번 프로젝트는 자동화된 배포 파이프라인의 혁신적인 효율성과 탁월한 안정성을 체감할 수 있는 소중한 경험이었습니다.
 ### 🧑🏻이현석: 프로젝트를 배포하여 실제로 사람들에게 서비스를 할 수 있게 되는 과정을 경험할 수 있는 좋은 기회였습니다.

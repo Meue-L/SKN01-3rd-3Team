@@ -662,8 +662,8 @@ jobs:
             docker-compose up -d
 ```
 
-### ✔️ FASTAPI에서는 CI/CD르 하나로 구성
-### ✔️ 사전 테스팅 단계(django에서는 migrate, tests..., vue에서는 npm install --legacy-peer-deps, npm run test)가 없어서 임의로 CD만 구현
+### ✔️ FASTAPI에서는 CI/CD를 하나로 구성
+### ✔️ 사전 테스팅 단계(django에서는 migrate, tests..., vue에서는 npm install --legacy-peer-deps, npm run test 등이 있었음)가 없기 때문에 임의로 CD만 구현
 ### ✔️ FASTAPI는 Django의 CD와 동일하게 image를 빌드하여 서버단에 업로드 후 Actions를 통해 AWS상에서 빌드함
 
 <br/><br/><br/><br/>
@@ -674,11 +674,6 @@ jobs:
 <img src="img/home.png">
 <img src="img/home2.png">
 <img src="img/travel.png">
-
-### Coverage Test
-<img src="img/lms_coverage.png" alt="Coverage Report" width="400">
-
-- Backend code coverage test 결과, 전체 코드의 81%가 test coverage에 포함되었으며, 주요 파일들은 높은 coverage 비율을 기록하였음
 
 <br/><br/><br/><br/>
 
@@ -709,6 +704,11 @@ jobs:
 <img src="img/backend_CI.png">
 
 ### 👉🏻CI테스트 결과 FRONTEND와 BACKEND 모두 이상 없이 통과하는 모습 확인
+
+### Coverage Test
+<img src="img/lms_coverage.png" alt="Coverage Report" width="400">
+
+- Backend code coverage test 결과, 전체 코드의 81%가 test coverage에 포함되었으며, 주요 파일들은 높은 coverage 비율을 기록하였음
 <br/><br/><br/><br/>
 
 # 13. Deploy Issue (배포 이슈)
